@@ -9,10 +9,24 @@ options(scipen = 999)
 setwd("/Users/carmenlouise/Documents/Zillow")
 prop <- fread('/Users/carmenlouise/Documents/Zillow/properties_2016.csv')
 t <- fread('/Users/carmenlouise/Documents/Zillow/train_2016_v2.csv')
-sample <- fread("/Users/carmenlouise/Documents/Zillow/sample_submission.csv", header = TRUE)
+#sample <- fread("/Users/carmenlouise/Documents/Zillow/sample_submission.csv", header = TRUE)
 
 t2 <- t %>% group_by(parcelid) %>% dplyr::summarise(logerror = mean(logerror))
 
+t2 <- filter(t2, logerror > .4 | logerror < .4)
+
+prop$airconditioningtypeid[is.na(prop$airconditioningtypeid)] <- 0
+prop$architecturalstyletypeid[is.na(prop$architecturalstyletypeid)] <- 0
+prop$buildingclasstypeid[is.na(prop$buildingclasstypeid)] <- 0
+prop$buildingqualitytypeid[is.na(prop$buildingqualitytypeid)] <- 0
+prop$propertylandusetypeid[is.na(prop$propertylandusetypeid)] <- 0
+prop$storytypeid[is.na(prop$storytypeid)] <- 0
+prop$typeconstructiontypeid[is.na(prop$typeconstructiontypeid)] <- 0
+
+imp_values <- preProcess(prop,
+                         method = c("medianImpute") # May not be needed
+)
+prop <- predict(imp_values, prop)
 
 prop$longmean <- mean((prop$longitude), na.rm=TRUE)/1e6
 prop$latmean <- mean((prop$latitude), na.rm=TRUE)/1e6
@@ -36,13 +50,10 @@ for(i in cidx){
   prop[[i]] <- as.integer(factor(prop[[i]]))
 }
 
-
+rm(t);gc()
 train <- merge(prop, t2, by="parcelid", all.y=TRUE)
 
 set.seed(181)
-
-qplot(train$logerror)
-
 # Enable caret to use MAE as eval metric
 maeSummary <- function (train,
                         lev = NULL,
@@ -53,7 +64,6 @@ maeSummary <- function (train,
 }
 
 modelLookup("xgbTree")
-
 control <- trainControl(method = "cv",
                         number = 5,
                         verboseIter=TRUE,
@@ -61,16 +71,16 @@ control <- trainControl(method = "cv",
 )
 
 xgb_grid_1 = expand.grid(
-  nrounds = c(1000),
-  subsample = c(.5),
-  max_depth = c(10),
-  eta = c(.1),
+  nrounds = c(500),
+  subsample = c(.75),
+  max_depth = c(5),
+  eta = c(.06),
   colsample_bytree=c(.5),
   min_child_weight=c(4),
   gamma=c(.5)
 )
 
-traindata <- xgb.DMatrix(as.matrix(select(train,-parcelid,-censustractandblock,-logerror)))
+traindata <- as.matrix(select(train,-parcelid,-censustractandblock,-logerror))
 target <- train[,logerror]
 
 cb <- train(y=target,
@@ -83,14 +93,15 @@ cb <- train(y=target,
             trControl = control
 )
 
+print(cb)
+
 prop2 <- select(prop,-parcelid,-censustractandblock)
 
-print(cb)
 cb_prediction <- predict(cb, prop2)
 cb_prediction
 mean(cb_prediction)
-predictions <- round(as.vector(cb_prediction), 5)
+predictions <- round(as.vector(cb_prediction), 4)
 
 result <- data.frame(cbind(prop$parcelid, predictions, predictions, predictions, predictions, predictions, predictions))
 colnames(result) <- c("parcelid","201610","201611","201612","201710","201711","201712")
-write.csv(result, file = "Carmen.csv", row.names = FALSE)
+write.csv(result, file = "Carmen_3.csv", row.names = FALSE)
