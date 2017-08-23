@@ -1,15 +1,33 @@
 library(reshape2)
 library(data.table)
 library(ggplot2)
-library(dplyr)
 library(caret)
 library(xgboost)
 library(Metrics)
+library(dplyr)
 options(scipen = 999)
 setwd("/Users/carmenlouise/Documents/Zillow")
 prop <- fread('/Users/carmenlouise/Documents/Zillow/properties_2016.csv')
 t <- fread('/Users/carmenlouise/Documents/Zillow/train_2016_v2.csv')
 sample <- fread("/Users/carmenlouise/Documents/Zillow/sample_submission.csv", header = TRUE)
+
+t2 <- t %>% group_by(parcelid) %>% dplyr::summarise(logerror = mean(logerror))
+
+
+prop$longmean <- mean((prop$longitude), na.rm=TRUE)/1e6
+prop$latmean <- mean((prop$latitude), na.rm=TRUE)/1e6
+prop$longitude1 <- prop$longitude/1e6
+prop$latitude1 <- prop$latitude/1e6
+
+prop[,longmean := NULL]
+prop[,latmean := NULL]
+prop[,longitude1 := NULL]
+prop[,latitude1 := NULL]
+prop[, landValRatio := (prop$landtaxvaluedollarcnt / (prop$landtaxvaluedollarcnt + prop$structuretaxvaluedollarcnt))]
+prop[, bathInteraction := (prop$bathroomcnt * prop$calculatedfinishedsquarefeet)]
+prop[, sqftRoom := (prop$calculatedfinishedsquarefeet / prop$roomcnt)]
+prop[, strucLand := (prop$calculatedfinishedsquarefeet / prop$lotsizesquarefeet)]
+prop[, age := 2020 - prop$yearbuilt]
 
 ctypes <- sapply(prop, class)
 cidx <- which(ctypes %in% c("character", "factor"))
@@ -19,7 +37,7 @@ for(i in cidx){
 }
 
 
-train <- merge(prop, t, by="parcelid", all.y=TRUE)
+train <- merge(prop, t2, by="parcelid", all.y=TRUE)
 
 set.seed(181)
 
@@ -34,7 +52,7 @@ maeSummary <- function (train,
   out
 }
 
-modelLookup("xgbLinear")
+modelLookup("xgbTree")
 
 control <- trainControl(method = "cv",
                         number = 5,
@@ -44,28 +62,33 @@ control <- trainControl(method = "cv",
 
 xgb_grid_1 = expand.grid(
   nrounds = c(1000),
-  eta = c(.01,.05,.08,.5),
-  lambda = c(0,.01,.05,.5,1),
-  alpha = c(0,.01,.05,.5,1)
+  subsample = c(.5),
+  max_depth = c(10),
+  eta = c(.1),
+  colsample_bytree=c(.5),
+  min_child_weight=c(4),
+  gamma=c(.5)
 )
 
-traindata <- xgb.DMatrix(as.matrix((train[,2:(ncol(train)-1)])))
+traindata <- xgb.DMatrix(as.matrix(select(train,-parcelid,-censustractandblock,-logerror)))
 target <- train[,logerror]
 
 cb <- train(y=target,
             x=traindata, 
             preProcess=NULL,
-            method= "xgbLinear", 
+            method= "xgbTree", 
             metric = "MAE", 
             maximize = FALSE, 
             tuneGrid = xgb_grid_1, 
             trControl = control
 )
 
-prop2 <- filter(prop,logerror != 0)
+prop2 <- select(prop,-parcelid,-censustractandblock)
 
 print(cb)
-cb_prediction <- predict(cb, prop)
+cb_prediction <- predict(cb, prop2)
+cb_prediction
+mean(cb_prediction)
 predictions <- round(as.vector(cb_prediction), 5)
 
 result <- data.frame(cbind(prop$parcelid, predictions, predictions, predictions, predictions, predictions, predictions))
