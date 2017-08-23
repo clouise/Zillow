@@ -79,11 +79,11 @@ control <- trainControl(method = "cv",
 )
 
 xgb_grid_1 = expand.grid(
-  nrounds = c(200),
-  subsample = c(.75,.78,.8),
-  max_depth = c(4,5,6),
-  eta = c(.06,.05,.04,.03),
-  colsample_bytree=c(.5),
+  nrounds = c(200,300,500),
+  subsample = c(.75,.8,.85),
+  max_depth = c(4,5,6,7,8),
+  eta = c(.06,.05,.04,.03,.02),
+  colsample_bytree=c(.4,.5),
   min_child_weight=c(1,4),
   gamma=c(.5)
 )
@@ -104,12 +104,13 @@ target <- train[,logerror]
 rm(t2);gc()
 cb <- train(y=target,
             x=traindata, 
-            preProcess=NULL,
-            method= "xgbTree", 
+            preProcess = NULL,
+            method = "xgbTree", 
             metric = "MAE", 
             maximize = FALSE, 
             tuneGrid = xgb_grid_2, 
-            trControl = control
+            trControl = control,
+            verbose = TRUE
 )
 
 # nrounds = 200, max_depth = 4, eta = 0.04, gamma = 0.5, colsample_bytree = 0.5, min_child_weight = 4 and subsample = 0.75
