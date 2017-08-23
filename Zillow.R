@@ -11,9 +11,18 @@ prop <- fread('/Users/carmenlouise/Documents/Zillow/properties_2016.csv')
 t <- fread('/Users/carmenlouise/Documents/Zillow/train_2016_v2.csv')
 #sample <- fread("/Users/carmenlouise/Documents/Zillow/sample_submission.csv", header = TRUE)
 
-t2 <- t %>% group_by(parcelid) %>% dplyr::summarise(logerror = mean(logerror))
+t$month <- as.numeric(substr(t$transactiondate,6,7))
+# fit <- lm(logerror ~ as.factor(month) +0, data= t)
+# summary(fit)
+# anova(fit)
+# aov <- aov(logerror ~ month, data=t)
+# TukeyHSD(aov, conf.level = 0.95)
+# 
+# ggplot(t, aes(x = as.factor(month), y = logerror)) +
+#   geom_boxplot()
 
-t2 <- filter(t2, logerror > .33 | logerror < .33)
+t2 <- filter(t, logerror > -.4 | logerror < .4)
+rm(t);gc()
 
 prop$airconditioningtypeid[is.na(prop$airconditioningtypeid)] <- 0
 prop$architecturalstyletypeid[is.na(prop$architecturalstyletypeid)] <- 0
@@ -50,7 +59,6 @@ for(i in cidx){
   prop[[i]] <- as.integer(factor(prop[[i]]))
 }
 
-rm(t);gc()
 train <- merge(prop, t2, by="parcelid", all.y=TRUE)
 
 set.seed(181)
@@ -74,35 +82,48 @@ xgb_grid_1 = expand.grid(
   nrounds = c(200),
   subsample = c(.75,.78,.8),
   max_depth = c(4,5,6),
-  eta = c(.06,.05,.04),
+  eta = c(.06,.05,.04,.03),
   colsample_bytree=c(.5),
   min_child_weight=c(1,4),
   gamma=c(.5)
 )
 
-traindata <- as.matrix(select(train,-parcelid,-censustractandblock,-logerror))
+xgb_grid_2 = expand.grid(
+  nrounds = c(300),
+  subsample = c(.75),
+  max_depth = c(4),
+  eta = c(.04),
+  colsample_bytree=c(.5),
+  min_child_weight=c(4),
+  gamma=c(.5)
+)
+
+traindata <- as.matrix(select(train,-censustractandblock,-transactiondate,-logerror,-parcelid))
 target <- train[,logerror]
 
+rm(t2);gc()
 cb <- train(y=target,
             x=traindata, 
             preProcess=NULL,
             method= "xgbTree", 
             metric = "MAE", 
             maximize = FALSE, 
-            tuneGrid = xgb_grid_1, 
+            tuneGrid = xgb_grid_2, 
             trControl = control
 )
 
-print(cb)
-
-prop2 <- select(prop,-parcelid,-censustractandblock)
-
 # nrounds = 200, max_depth = 4, eta = 0.04, gamma = 0.5, colsample_bytree = 0.5, min_child_weight = 4 and subsample = 0.75
-cb_prediction <- predict(cb, prop2)
-cb_prediction
-mean(cb_prediction)
-predictions <- round(as.vector(cb_prediction), 4)
+print(cb)
+prop2 <- select(prop,-censustractandblock,-parcelid)
 
-result <- data.frame(cbind(prop$parcelid, predictions, predictions, predictions, predictions, predictions, predictions))
+rm(prop);gc()
+
+prop2$month <- 10
+cb_prediction2 <- predict(cb, prop2)
+cb_prediction2
+mean(cb_prediction2)
+predictions1 <- round(as.vector(cb_prediction1), 4)
+
+result <- data.frame(cbind(prop$parcelid, predictions1, predictions2, predictions3, predictions1, predictions2, prediction3))
 colnames(result) <- c("parcelid","201610","201611","201612","201710","201711","201712")
 write.csv(result, file = "Carmen_4.csv", row.names = FALSE)
