@@ -13,7 +13,7 @@ t <- fread('/Users/carmenlouise/Documents/Zillow/train_2016_v2.csv')
 
 t2 <- t %>% group_by(parcelid) %>% dplyr::summarise(logerror = mean(logerror))
 
-t2 <- filter(t2, logerror > .4 | logerror < .4)
+t2 <- filter(t2, logerror > .33 | logerror < .33)
 
 prop$airconditioningtypeid[is.na(prop$airconditioningtypeid)] <- 0
 prop$architecturalstyletypeid[is.na(prop$architecturalstyletypeid)] <- 0
@@ -71,12 +71,12 @@ control <- trainControl(method = "cv",
 )
 
 xgb_grid_1 = expand.grid(
-  nrounds = c(500),
-  subsample = c(.75),
-  max_depth = c(5),
-  eta = c(.06),
+  nrounds = c(200),
+  subsample = c(.75,.78,.8),
+  max_depth = c(4,5,6),
+  eta = c(.06,.05,.04),
   colsample_bytree=c(.5),
-  min_child_weight=c(4),
+  min_child_weight=c(1,4),
   gamma=c(.5)
 )
 
@@ -97,6 +97,7 @@ print(cb)
 
 prop2 <- select(prop,-parcelid,-censustractandblock)
 
+# nrounds = 200, max_depth = 4, eta = 0.04, gamma = 0.5, colsample_bytree = 0.5, min_child_weight = 4 and subsample = 0.75
 cb_prediction <- predict(cb, prop2)
 cb_prediction
 mean(cb_prediction)
@@ -104,4 +105,4 @@ predictions <- round(as.vector(cb_prediction), 4)
 
 result <- data.frame(cbind(prop$parcelid, predictions, predictions, predictions, predictions, predictions, predictions))
 colnames(result) <- c("parcelid","201610","201611","201612","201710","201711","201712")
-write.csv(result, file = "Carmen_3.csv", row.names = FALSE)
+write.csv(result, file = "Carmen_4.csv", row.names = FALSE)
